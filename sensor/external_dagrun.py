@@ -74,7 +74,7 @@ class ClosestExternalTaskSensor(ExternalTaskSensor):
         # Mock value of execution_delta to avoid errors during initialization
         # of the parent sensor
         kwargs["execution_delta"] = timedelta(days=1)
-        self.is_following = bool(kwargs.get("is_following"))
+        self.is_following = kwargs.pop("is_following", False)
         super().__init__(*args, **kwargs)
 
     @provide_session
