@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from typing import Dict, Any
 
 from airflow import AirflowException
 from airflow.models import DagRun, DagBag
@@ -47,7 +46,8 @@ class LastExternalDagRunStatusSensor(BaseSensorOperator):
 
 class ClosestExternalTaskSensor(ExternalTaskSensor):
     """
-    Sensor finds closes external execution date before the sensor execution date
+    Sensor finds closes external execution date before or after the sensor
+    execution date
     """
 
     def _get_external_latest_execution_date(self, execution_date):
@@ -59,19 +59,27 @@ class ClosestExternalTaskSensor(ExternalTaskSensor):
                 f" {external_dag.schedule_interval}"
             )
         itr = croniter(external_dag.schedule_interval, execution_date)
-        dt = itr.get_prev(datetime)
-        self.log.info(f"The latest execution_date for {self.external_dag_id} is {dt}")
+        dt = itr.get_next(datetime) if self.is_following else itr.get_prev(datetime)
+        self.log.info("The closest "
+                      + ('following' if self.is_following else 'preceding')
+                      + f" execution_date for {self.external_dag_id} is {dt}")
         return dt
 
     def __init__(self, *args, **kwargs) -> None:
+        """
+
+        :param is_following: if True find closest following else find closest
+        preceding. Default False
+        """
         # Mock value of execution_delta to avoid errors during initialization
-        # of the sensor
+        # of the parent sensor
         kwargs["execution_delta"] = timedelta(days=1)
+        self.is_following = bool(kwargs.get("is_following"))
         super().__init__(*args, **kwargs)
 
-
-
-    def execute(self, context: Dict) -> Any:
+    @provide_session
+    def poke(self, context, session=None):
         execution_date = context["execution_date"]
-        self.execution_delta = execution_date - self._get_external_latest_execution_date(execution_date)
-        super().execute(context)
+        self.execution_delta = execution_date - self._get_external_latest_execution_date(
+            execution_date)
+        return super().poke(context, session)
